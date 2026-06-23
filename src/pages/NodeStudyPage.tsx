@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { nanoid } from 'nanoid';
 import { useApp } from '../context/AppContext';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -94,7 +95,15 @@ export function NodeStudyPage() {
   }
 
   function handleMarkAsKnown() {
-    dispatch({ type: 'COMPLETE_NODE', nodeId: node.id });
+    dispatch({
+      type: 'APPLY_GRAPH_PATCH',
+      patch: {
+        id: nanoid(),
+        reason: `이미 알고 있음: ${node.name}`,
+        operations: [{ type: 'exclude_node', nodeId: node.id }],
+        expectedBaseVersion: project!.graphVersion,
+      },
+    });
     dispatch({ type: 'NAVIGATE', view: 'dag-workspace' });
   }
 

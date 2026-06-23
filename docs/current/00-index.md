@@ -25,6 +25,8 @@ Last Updated: 2026-06-22
 | reducer, storage, validation 구조를 구현하고 싶다 | `05-architecture.md` |
 | MVP를 어떤 순서로 만들지 정하고 싶다 | `06-implementation-plan.md` |
 | 버전과 문서 구조를 확인하고 싶다 | `00-manifest.md` |
+| 학습 범위 분해 절차가 담긴 스킬 문서를 확인하고 싶다 | `10-learning-scope-decomposition-skill.md` |
+| 지식 이해 테스트를 생성하는 스킬 문서를 확인하고 싶다 | `11-knowledge-understanding-test-skill.md` |
 
 ---
 

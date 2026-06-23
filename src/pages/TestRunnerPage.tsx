@@ -7,11 +7,11 @@ import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { gradeExam } from '../services/llmGateway';
 
 const typeLabels: Record<number, string> = {
-  1: '개념 이해',
-  2: '적용',
-  3: '분석/비교',
-  4: '역추론',
-  5: '종합 응용',
+  1: '내포→외연 생성',
+  2: '외연 분류',
+  3: '내포 판단',
+  4: '내포 디자인',
+  5: '내포 적용',
 };
 
 export function TestRunnerPage() {
@@ -130,7 +130,7 @@ export function TestRunnerPage() {
           <div className="flex items-center gap-2 mb-3">
             <Badge color="gray">{typeLabels[currentQuestion.type] ?? `Type ${currentQuestion.type}`}</Badge>
             {currentQuestion.type === 4 && (
-              <span className="text-xs text-orange-400">직접 언급 없이 추론하세요</span>
+              <span className="text-xs text-orange-400">사례들로부터 정의를 설계하세요</span>
             )}
           </div>
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-gray-200 leading-relaxed text-sm whitespace-pre-wrap">

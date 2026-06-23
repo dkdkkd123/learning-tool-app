@@ -13,6 +13,7 @@ export type StudyProject = {
   graphVersion: number;
   testGoals: Record<NodeId, TestGoal>;
   testRecords: Record<string, TestRecord>;
+  pendingTests: PendingTest[];
   events: ProjectEvent[];
   createdAt: string;
   updatedAt: string;
@@ -46,6 +47,13 @@ export type KnowledgeNode = {
 };
 
 export type Edge = { from: NodeId; to: NodeId };
+
+export type PendingTest = {
+  id: string;
+  nodeId: string;
+  nodeName: string;
+  requestedAt: string;
+};
 
 export type TestGoal = {
   id: string;
@@ -168,6 +176,35 @@ export type CapstoneCandidate = {
 
 export type ModelProvider = 'openai' | 'anthropic';
 
+export type ModelSpec = {
+  provider: ModelProvider;
+  modelId: string;
+  label: string;
+};
+
+export type ModelConfig = {
+  provider: ModelProvider;
+  modelId: string;
+};
+
+export const OPENAI_MODEL_SPECS: ModelSpec[] = [
+  { provider: 'openai', modelId: 'gpt-4o',      label: 'GPT-4o' },
+  { provider: 'openai', modelId: 'gpt-4o-mini',  label: 'GPT-4o mini (빠름)' },
+  { provider: 'openai', modelId: 'o3-mini',       label: 'o3 mini (추론)' },
+];
+
+export const ANTHROPIC_MODEL_SPECS: ModelSpec[] = [
+  { provider: 'anthropic', modelId: 'claude-opus-4-8',           label: 'Claude Opus 4.8 (강력)' },
+  { provider: 'anthropic', modelId: 'claude-sonnet-4-6',         label: 'Claude Sonnet 4.6' },
+  { provider: 'anthropic', modelId: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (빠름)' },
+];
+
+export const ALL_MODEL_SPECS: ModelSpec[] = [...OPENAI_MODEL_SPECS, ...ANTHROPIC_MODEL_SPECS];
+
+export const DEFAULT_OPENAI_MODEL = 'gpt-4o';
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6';
+export const DEFAULT_PROVIDER: ModelProvider = 'openai';
+
 export type ModelOption = {
   provider: ModelProvider;
   model: string;
@@ -175,26 +212,30 @@ export type ModelOption = {
 };
 
 export const MODEL_OPTIONS: ModelOption[] = [
-  { provider: 'openai',    model: 'gpt-4o',              label: 'ChatGPT (GPT-4o)' },
-  { provider: 'anthropic', model: 'claude-sonnet-4-6',   label: 'Claude (Sonnet 4.6)' },
+  { provider: 'openai',    model: DEFAULT_OPENAI_MODEL,    label: 'ChatGPT (GPT-4o)' },
+  { provider: 'anthropic', model: DEFAULT_ANTHROPIC_MODEL, label: 'Claude (Sonnet 4.6)' },
 ];
-
-export const DEFAULT_PROVIDER: ModelProvider = 'openai';
 
 export type AppView =
   | 'home'
   | 'intake'
+  | 'intake-step1'
+  | 'intake-step2'
+  | 'intake-step3'
   | 'capstone-review'
   | 'dag-workspace'
   | 'node-study'
   | 'test-running'
   | 'test-result'
+  | 'test-queue'
   | 'capstone-attempt'
-  | 'achievement-log';
+  | 'achievement-log'
+  | 'options';
 
 export type AppState = {
   view: AppView;
   selectedProvider: ModelProvider;
+  selectedModels: { openai: string; anthropic: string };
   currentProjectId?: string;
   project?: StudyProject;
   capstoneCandidates?: CapstoneCandidate[];
@@ -215,3 +256,10 @@ export type AppState = {
     result?: TestRecord;
   };
 };
+
+export function getModelConfig(state: AppState): ModelConfig {
+  return {
+    provider: state.selectedProvider,
+    modelId: state.selectedModels[state.selectedProvider],
+  };
+}

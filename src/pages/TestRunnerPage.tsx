@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { gradeExam } from '../services/llmGateway';
+import { getModelConfig } from '../domain/types';
 
 const typeLabels: Record<number, string> = {
   1: '내포→외연 생성',
@@ -63,11 +64,11 @@ export function TestRunnerPage() {
     setIsGrading(true);
     try {
       const allAnswers = { ...answers };
-      // Fill blanks for unanswered
       for (const q of exam.questions) {
         if (!allAnswers[q.id]) allAnswers[q.id] = '';
       }
-      const { results, summary } = await gradeExam(exam, answerKey, allAnswers, testGoal, state.selectedProvider);
+      const config = getModelConfig(state);
+      const { results, summary } = await gradeExam(exam, answerKey, allAnswers, testGoal, config);
       const record = {
         id: nanoid(),
         examId: exam.id,
@@ -106,6 +107,14 @@ export function TestRunnerPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
+            <div className="flex items-center gap-2 mb-1">
+              <button
+                onClick={() => dispatch({ type: 'NAVIGATE', view: 'dag-workspace' })}
+                className="text-gray-500 hover:text-gray-300 text-sm"
+              >
+                ← 워크스페이스로
+              </button>
+            </div>
             <h1 className="font-semibold text-gray-200">{node?.name}</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge color="blue">{exam.difficulty}</Badge>
@@ -178,11 +187,7 @@ export function TestRunnerPage() {
               <div
                 key={i}
                 className={`w-2 h-2 rounded-full transition-colors ${
-                  i < localIndex
-                    ? 'bg-blue-500'
-                    : i === localIndex
-                    ? 'bg-blue-300'
-                    : 'bg-gray-700'
+                  i < localIndex ? 'bg-blue-500' : i === localIndex ? 'bg-blue-300' : 'bg-gray-700'
                 }`}
               />
             ))}

@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Button } from '../components/ui/Button';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { singleCall } from '../services/llmGateway';
+import { getModelConfig } from '../domain/types';
 
 export function CapstoneAttemptPage() {
   const { state, dispatch } = useApp();
@@ -31,7 +32,7 @@ export function CapstoneAttemptPage() {
     try {
       const systemPrompt = 'JSON만 출력한다. 마크다운 코드 블록을 사용하지 않는다.';
       const userPrompt = `캡스톤 과제: ${activeCapstone!.title}\n성공 기준: ${activeCapstone!.successCriteria}\n\n제출물:\n${submittedOutput}\n\n위 제출물이 성공 기준을 충족하는지 판단하고 JSON으로 반환하세요.\n{"verdict": "achieved|failed", "reasoning": "판단 근거", "suggestions": ["개선점1", "개선점2"]}`;
-      const text = await singleCall(systemPrompt, userPrompt, state.selectedProvider);
+      const text = await singleCall(systemPrompt, userPrompt, getModelConfig(state));
       try {
         const parsed = JSON.parse(text) as { verdict: string; reasoning: string; suggestions: string[] };
         setLlmSuggestion(

@@ -35,7 +35,7 @@ export function TestResultPage() {
   }
 
   function handleRetry() {
-    dispatch({ type: 'NAVIGATE', view: 'node-study' });
+    dispatch({ type: 'NAVIGATE', view: 'test-queue' });
   }
 
   return (

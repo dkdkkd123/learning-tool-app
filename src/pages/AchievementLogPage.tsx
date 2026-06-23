@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { Button } from '../components/ui/Button';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { generateAchievementLog, type AchievementLog } from '../services/llmGateway';
+import { getModelConfig } from '../domain/types';
 
 export function AchievementLogPage() {
   const { state, dispatch } = useApp();
@@ -34,7 +35,7 @@ export function AchievementLogPage() {
         testRecords,
         project.events,
         completedNodes,
-        state.selectedProvider
+        getModelConfig(state)
       );
       setLog(result);
     } catch (e) {

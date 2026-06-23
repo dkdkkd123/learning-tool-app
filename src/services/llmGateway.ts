@@ -13,7 +13,7 @@ import type {
   TestRecord,
   GraphPatch,
   StudyProject,
-  ModelProvider,
+  ModelConfig,
 } from '../domain/types';
 import {
   CAPSTONE_SYSTEM_PROMPT,
@@ -38,24 +38,19 @@ import {
 } from '../prompts/achievementLogPrompt';
 
 // ---------------------------------------------------------------------------
-// Provider config
-// ---------------------------------------------------------------------------
-
-const MODEL_MAP: Record<ModelProvider, string> = {
-  openai: 'gpt-4o',
-  anthropic: 'claude-sonnet-4-6',
-};
-
-// ---------------------------------------------------------------------------
 // Low-level call helpers
 // ---------------------------------------------------------------------------
 
-async function callAnthropic(systemPrompt: string, userPrompt: string): Promise<string> {
+async function callAnthropic(
+  systemPrompt: string,
+  userPrompt: string,
+  modelId: string
+): Promise<string> {
   const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('VITE_ANTHROPIC_API_KEY가 설정되지 않았습니다.');
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   const response = await client.messages.create({
-    model: MODEL_MAP.anthropic,
+    model: modelId,
     max_tokens: 4096,
     system: systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
@@ -65,12 +60,16 @@ async function callAnthropic(systemPrompt: string, userPrompt: string): Promise<
   return block.text;
 }
 
-async function callOpenAI(systemPrompt: string, userPrompt: string): Promise<string> {
+async function callOpenAI(
+  systemPrompt: string,
+  userPrompt: string,
+  modelId: string
+): Promise<string> {
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
   if (!apiKey) throw new Error('VITE_OPENAI_API_KEY가 설정되지 않았습니다.');
   const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
   const response = await client.chat.completions.create({
-    model: MODEL_MAP.openai,
+    model: modelId,
     max_tokens: 4096,
     messages: [
       { role: 'system', content: systemPrompt },
@@ -83,11 +82,11 @@ async function callOpenAI(systemPrompt: string, userPrompt: string): Promise<str
 async function callLLM(
   systemPrompt: string,
   userPrompt: string,
-  provider: ModelProvider,
+  config: ModelConfig
 ): Promise<string> {
-  return provider === 'anthropic'
-    ? callAnthropic(systemPrompt, userPrompt)
-    : callOpenAI(systemPrompt, userPrompt);
+  return config.provider === 'anthropic'
+    ? callAnthropic(systemPrompt, userPrompt, config.modelId)
+    : callOpenAI(systemPrompt, userPrompt, config.modelId);
 }
 
 function parseJSON<T>(text: string): T {
@@ -102,13 +101,13 @@ function parseJSON<T>(text: string): T {
 async function callWithRetry<T>(
   systemPrompt: string,
   userPrompt: string,
-  provider: ModelProvider,
-  transform: (raw: string) => T,
+  config: ModelConfig,
+  transform: (raw: string) => T
 ): Promise<T> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const raw = await callLLM(systemPrompt, userPrompt, provider);
+      const raw = await callLLM(systemPrompt, userPrompt, config);
       return transform(raw);
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));
@@ -119,22 +118,22 @@ async function callWithRetry<T>(
 }
 
 // ---------------------------------------------------------------------------
-// Public API — all functions accept provider as last param
+// Public API
 // ---------------------------------------------------------------------------
 
 export async function proposeCapstones(
   input: string,
   mode: 'learning_content' | 'capstone',
-  provider: ModelProvider,
+  config: ModelConfig,
   preferences?: {
     outputType?: string;
     difficulty?: string;
     knownKnowledge?: string;
     excludedScope?: string;
-  },
+  }
 ): Promise<CapstoneCandidate[]> {
   const userPrompt = buildCapstoneUserPrompt(input, mode, preferences);
-  return callWithRetry(CAPSTONE_SYSTEM_PROMPT, userPrompt, provider, (raw) => {
+  return callWithRetry(CAPSTONE_SYSTEM_PROMPT, userPrompt, config, (raw) => {
     const data = parseJSON<{ capstoneCandidates: CapstoneCandidate[] }>(raw);
     return data.capstoneCandidates;
   });
@@ -142,12 +141,12 @@ export async function proposeCapstones(
 
 export async function generateDagDraft(
   capstone: CapstoneNode,
-  provider: ModelProvider,
+  config: ModelConfig,
   knownKnowledge?: string,
-  excludedScope?: string,
+  excludedScope?: string
 ): Promise<{ nodes: Record<string, KnowledgeNode>; edges: Edge[] }> {
   const userPrompt = buildDagUserPrompt(capstone, knownKnowledge, excludedScope);
-  return callWithRetry(DAG_SYSTEM_PROMPT, userPrompt, provider, (raw) => {
+  return callWithRetry(DAG_SYSTEM_PROMPT, userPrompt, config, (raw) => {
     type RawNode = {
       tempId: string;
       name: string;
@@ -155,7 +154,7 @@ export async function generateDagDraft(
       prerequisiteTempIds: string[];
     };
     const data = parseJSON<{ nodes: RawNode[]; capstonePrerequisiteTempIds?: string[] }>(raw);
-    const now = new Date().toISOString();
+    const now2 = new Date().toISOString();
 
     const tempToReal: Record<string, string> = {};
     for (const rn of data.nodes) {
@@ -181,8 +180,8 @@ export async function generateDagDraft(
         testGoalStatus: 'none',
         notes: [],
         createdBy: 'llm',
-        createdAt: now,
-        updatedAt: now,
+        createdAt: now2,
+        updatedAt: now2,
       };
 
       for (const preId of prerequisiteNodeIds) {
@@ -192,7 +191,6 @@ export async function generateDagDraft(
       }
     }
 
-    // Connect specified capstone prerequisite nodes → capstone
     const capstonePrereqs = (data.capstonePrerequisiteTempIds ?? [])
       .map((tid) => tempToReal[tid])
       .filter(Boolean);
@@ -204,7 +202,6 @@ export async function generateDagDraft(
         }
       }
     } else {
-      // Fallback: connect leaf knowledge nodes (no knowledge-node successors) to capstone
       const hasKnowledgeSuccessor = new Set<string>();
       for (const edge of edges) {
         if (nodes[edge.to]) hasKnowledgeSuccessor.add(edge.from);
@@ -223,10 +220,10 @@ export async function generateDagDraft(
 export async function generateTestGoal(
   node: KnowledgeNode,
   capstoneContext: CapstoneNode,
-  provider: ModelProvider,
+  config: ModelConfig
 ): Promise<TestGoal> {
   const userPrompt = buildTestGoalUserPrompt(node, capstoneContext);
-  return callWithRetry(TEST_GOAL_SYSTEM_PROMPT, userPrompt, provider, (raw) => {
+  return callWithRetry(TEST_GOAL_SYSTEM_PROMPT, userPrompt, config, (raw) => {
     type RawGoal = {
       topic: string;
       targetDescription: string;
@@ -258,18 +255,18 @@ export async function generateExam(
   testGoal: TestGoal,
   node: KnowledgeNode,
   difficulty: '초급' | '중급' | '고급',
-  provider: ModelProvider,
-  pastRecords?: TestRecord[],
+  config: ModelConfig,
+  pastRecords?: TestRecord[]
 ): Promise<{ exam: ExamDocument; answerKey: AnswerKey }> {
   const pastSummary = pastRecords
     ?.map(
       (r) =>
-        `${r.difficulty}: ${r.summary.overallVerdict} (${r.summary.passCount}/${r.summary.totalCount})`,
+        `${r.difficulty}: ${r.summary.overallVerdict} (${r.summary.passCount}/${r.summary.totalCount})`
     )
     .join(', ');
 
   const userPrompt = buildExamUserPrompt(testGoal, node, difficulty, pastSummary);
-  return callWithRetry(EXAM_SYSTEM_PROMPT, userPrompt, provider, (raw) => {
+  return callWithRetry(EXAM_SYSTEM_PROMPT, userPrompt, config, (raw) => {
     return parseJSON<{ exam: ExamDocument; answerKey: AnswerKey }>(raw);
   });
 }
@@ -279,13 +276,13 @@ export async function gradeExam(
   answerKey: AnswerKey,
   submittedAnswers: Record<string, string>,
   testGoal: TestGoal,
-  provider: ModelProvider,
+  config: ModelConfig
 ): Promise<{
   results: QuestionResult[];
   summary: TestRecord['summary'];
 }> {
   const userPrompt = buildGradingUserPrompt(exam, answerKey, submittedAnswers, testGoal.completionRule);
-  return callWithRetry(GRADING_SYSTEM_PROMPT, userPrompt, provider, (raw) => {
+  return callWithRetry(GRADING_SYSTEM_PROMPT, userPrompt, config, (raw) => {
     return parseJSON<{
       results: QuestionResult[];
       summary: TestRecord['summary'];
@@ -296,10 +293,11 @@ export async function gradeExam(
 export async function generateGraphPatch(
   project: StudyProject,
   userInstruction: string,
-  provider: ModelProvider,
+  config: ModelConfig,
+  referencedNodeIds?: string[]
 ): Promise<GraphPatch> {
-  const userPrompt = buildGraphPatchUserPrompt(project, userInstruction);
-  return callWithRetry(GRAPH_PATCH_SYSTEM_PROMPT, userPrompt, provider, (raw) => {
+  const userPrompt = buildGraphPatchUserPrompt(project, userInstruction, referencedNodeIds);
+  return callWithRetry(GRAPH_PATCH_SYSTEM_PROMPT, userPrompt, config, (raw) => {
     return parseJSON<GraphPatch>(raw);
   });
 }
@@ -318,22 +316,22 @@ export type AchievementLog = {
 export async function singleCall(
   systemPrompt: string,
   userPrompt: string,
-  provider: ModelProvider,
+  config: ModelConfig
 ): Promise<string> {
-  return callLLM(systemPrompt, userPrompt, provider);
+  return callLLM(systemPrompt, userPrompt, config);
 }
 
 export async function chatCompletion(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   systemPrompt: string,
-  provider: ModelProvider,
+  config: ModelConfig
 ): Promise<string> {
-  if (provider === 'anthropic') {
+  if (config.provider === 'anthropic') {
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error('VITE_ANTHROPIC_API_KEY가 설정되지 않았습니다.');
     const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
     const response = await client.messages.create({
-      model: MODEL_MAP.anthropic,
+      model: config.modelId,
       max_tokens: 1024,
       system: systemPrompt,
       messages,
@@ -346,7 +344,7 @@ export async function chatCompletion(
     if (!apiKey) throw new Error('VITE_OPENAI_API_KEY가 설정되지 않았습니다.');
     const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
     const response = await client.chat.completions.create({
-      model: MODEL_MAP.openai,
+      model: config.modelId,
       max_tokens: 1024,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
     });
@@ -359,10 +357,10 @@ export async function generateAchievementLog(
   testRecords: TestRecord[],
   events: typeof project.events,
   completedNodes: KnowledgeNode[],
-  provider: ModelProvider,
+  config: ModelConfig
 ): Promise<AchievementLog> {
   const userPrompt = buildAchievementLogUserPrompt(project, testRecords, events, completedNodes);
-  return callWithRetry(ACHIEVEMENT_LOG_SYSTEM_PROMPT, userPrompt, provider, (raw) => {
+  return callWithRetry(ACHIEVEMENT_LOG_SYSTEM_PROMPT, userPrompt, config, (raw) => {
     return parseJSON<AchievementLog>(raw);
   });
 }

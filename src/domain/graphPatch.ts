@@ -22,7 +22,6 @@ export function validatePatch(
     errors.push('패치에 작업(operations)이 없습니다.');
   }
 
-  // Simulate apply to check validity
   try {
     const simulated = applyPatchToProject(patch, project, true);
     if (detectCycle(simulated.nodes, simulated.edges)) {
@@ -52,6 +51,41 @@ export function applyPatch(patch: GraphPatch, project: StudyProject): StudyProje
   return updated;
 }
 
+export function simulatePatch(patch: GraphPatch, project: StudyProject): StudyProject {
+  return applyPatchToProject(patch, project, true);
+}
+
+export type PatchDiff = {
+  addedNodeIds: Set<string>;
+  removedNodeIds: Set<string>;
+  addedEdgeKeys: Set<string>;
+  removedEdgeKeys: Set<string>;
+  simulatedNodes: Record<string, KnowledgeNode>;
+  simulatedEdges: Edge[];
+};
+
+export function getPatchDiff(patch: GraphPatch, project: StudyProject): PatchDiff | null {
+  try {
+    const after = simulatePatch(patch, project);
+    const addedNodeIds = new Set(Object.keys(after.nodes).filter((id) => !project.nodes[id]));
+    const removedNodeIds = new Set(Object.keys(project.nodes).filter((id) => !after.nodes[id]));
+    const afterEdgeKeys = new Set(after.edges.map((e) => `${e.from}->${e.to}`));
+    const beforeEdgeKeys = new Set(project.edges.map((e) => `${e.from}->${e.to}`));
+    const addedEdgeKeys = new Set([...afterEdgeKeys].filter((k) => !beforeEdgeKeys.has(k)));
+    const removedEdgeKeys = new Set([...beforeEdgeKeys].filter((k) => !afterEdgeKeys.has(k)));
+    return {
+      addedNodeIds,
+      removedNodeIds,
+      addedEdgeKeys,
+      removedEdgeKeys,
+      simulatedNodes: after.nodes,
+      simulatedEdges: after.edges,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function applyPatchToProject(
   patch: GraphPatch,
   project: StudyProject,
@@ -70,7 +104,6 @@ function applyPatchToProject(
           updatedAt: now,
         };
         nodes[node.id] = node;
-        // Add edges for prerequisites
         for (const preId of node.prerequisiteNodeIds) {
           if (!edges.some((e) => e.from === preId && e.to === node.id)) {
             edges.push({ from: preId, to: node.id });
@@ -90,7 +123,21 @@ function applyPatchToProject(
       }
       case 'exclude_node': {
         if (!nodes[op.nodeId]) throw new Error(`노드 ${op.nodeId}가 존재하지 않습니다.`);
-        nodes[op.nodeId] = { ...nodes[op.nodeId], status: 'excluded', updatedAt: now };
+        // Find all predecessors and successors of the excluded node
+        const preds = edges.filter((e) => e.to === op.nodeId).map((e) => e.from);
+        const succs = edges.filter((e) => e.from === op.nodeId).map((e) => e.to);
+        // Delete the node
+        delete nodes[op.nodeId];
+        // Remove all edges involving this node
+        edges = edges.filter((e) => e.from !== op.nodeId && e.to !== op.nodeId);
+        // Add transitive edges: each predecessor → each successor
+        for (const pred of preds) {
+          for (const succ of succs) {
+            if (!edges.some((e) => e.from === pred && e.to === succ)) {
+              edges.push({ from: pred, to: succ });
+            }
+          }
+        }
         break;
       }
       case 'add_edge': {
@@ -197,6 +244,21 @@ function applyPatchToProject(
     if (!edgeSet.has(key) && nodes[edge.from] && (nodes[edge.to] || capstoneIds.has(edge.to))) {
       edgeSet.add(key);
       finalEdges.push(edge);
+    }
+  }
+
+  // Enforce capstone leaf invariant: all knowledge nodes with no outgoing edges must connect to capstone
+  if (project.activeCapstoneId && capstoneIds.has(project.activeCapstoneId)) {
+    const hasOutgoing = new Set<string>();
+    for (const e of finalEdges) hasOutgoing.add(e.from);
+    for (const nodeId of Object.keys(nodes)) {
+      if (!hasOutgoing.has(nodeId)) {
+        const key = `${nodeId}->${project.activeCapstoneId}`;
+        if (!edgeSet.has(key)) {
+          edgeSet.add(key);
+          finalEdges.push({ from: nodeId, to: project.activeCapstoneId });
+        }
+      }
     }
   }
 

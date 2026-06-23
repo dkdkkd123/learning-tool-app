@@ -4,11 +4,12 @@ import type { KnowledgeNode } from '../../domain/types';
 
 type NodeData = {
   node: KnowledgeNode;
-  isSelected: boolean;
-  onDoubleClick: (nodeId: string) => void;
+  previewHighlight?: 'added' | 'removed';
 };
 
-function statusStyle(status: KnowledgeNode['status']): string {
+function statusStyle(status: KnowledgeNode['status'], highlight?: 'added' | 'removed'): string {
+  if (highlight === 'added') return 'border-emerald-400 bg-emerald-950 shadow-emerald-900 shadow-lg';
+  if (highlight === 'removed') return 'border-red-500 bg-red-950 opacity-60';
   switch (status) {
     case 'waiting': return 'border-gray-600 bg-gray-800';
     case 'studying': return 'border-yellow-400 bg-yellow-950 shadow-yellow-900';
@@ -18,7 +19,13 @@ function statusStyle(status: KnowledgeNode['status']): string {
   }
 }
 
-function statusBadge(status: KnowledgeNode['status']) {
+function statusBadge(status: KnowledgeNode['status'], highlight?: 'added' | 'removed') {
+  if (highlight === 'added') {
+    return <span className="text-xs bg-emerald-800 text-emerald-200 px-2 py-0.5 rounded-full">+ 추가</span>;
+  }
+  if (highlight === 'removed') {
+    return <span className="text-xs bg-red-800 text-red-200 px-2 py-0.5 rounded-full">- 제거</span>;
+  }
   switch (status) {
     case 'waiting': return null;
     case 'studying': return <span className="text-xs bg-yellow-800 text-yellow-200 px-2 py-0.5 rounded-full">학습 중</span>;
@@ -28,41 +35,26 @@ function statusBadge(status: KnowledgeNode['status']) {
   }
 }
 
-function testGoalBadge(status: KnowledgeNode['testGoalStatus']) {
-  if (status === 'stale') {
-    return <span className="text-xs bg-orange-900 text-orange-300 px-1.5 py-0.5 rounded-full">오래됨</span>;
-  }
-  if (status === 'ready') {
-    return <span className="text-xs bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded-full">테스트 준비</span>;
-  }
-  return null;
-}
-
-export function KnowledgeNodeCard({ data }: { data: NodeData }) {
-  const { node, isSelected, onDoubleClick } = data;
+export function KnowledgeNodeCard({ data, selected }: { data: NodeData; selected?: boolean }) {
+  const { node, previewHighlight } = data;
 
   return (
     <div
       className={`
         w-52 rounded-xl border-2 p-3 cursor-pointer shadow-lg transition-all
-        ${statusStyle(node.status)}
-        ${isSelected ? 'ring-2 ring-blue-400 ring-offset-1 ring-offset-gray-900' : ''}
+        ${statusStyle(node.status, previewHighlight)}
+        ${selected ? 'ring-2 ring-blue-400 ring-offset-1 ring-offset-gray-900' : ''}
       `}
-      onDoubleClick={() => onDoubleClick(node.id)}
     >
       <Handle type="target" position={Position.Left} className="!bg-gray-500 !w-2 !h-2" />
       <Handle type="source" position={Position.Right} className="!bg-gray-500 !w-2 !h-2" />
 
       <div className="flex items-start justify-between gap-1 mb-1">
         <span className="text-sm font-semibold text-gray-100 leading-tight line-clamp-2">{node.name}</span>
-        {statusBadge(node.status)}
+        {statusBadge(node.status, previewHighlight)}
       </div>
 
-      <p className="text-xs text-gray-400 leading-relaxed line-clamp-3 mb-1.5">{node.summary}</p>
-
-      <div className="flex gap-1 flex-wrap">
-        {testGoalBadge(node.testGoalStatus)}
-      </div>
+      <p className="text-xs text-gray-400 leading-relaxed line-clamp-3">{node.summary}</p>
     </div>
   );
 }

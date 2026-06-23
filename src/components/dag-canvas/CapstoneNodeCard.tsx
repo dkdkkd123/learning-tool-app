@@ -4,7 +4,6 @@ import type { CapstoneNode } from '../../domain/types';
 
 type NodeData = {
   node: CapstoneNode;
-  isSelected: boolean;
 };
 
 function statusStyle(status: CapstoneNode['status']): string {
@@ -18,15 +17,15 @@ function statusStyle(status: CapstoneNode['status']): string {
   }
 }
 
-export function CapstoneNodeCard({ data }: { data: NodeData }) {
-  const { node, isSelected } = data;
+export function CapstoneNodeCard({ data, selected }: { data: NodeData; selected?: boolean }) {
+  const { node } = data;
 
   return (
     <div
       className={`
         w-56 rounded-xl border-2 p-3 shadow-lg
         ${statusStyle(node.status)}
-        ${isSelected ? 'ring-2 ring-purple-300 ring-offset-1 ring-offset-gray-900' : ''}
+        ${selected ? 'ring-2 ring-purple-300 ring-offset-1 ring-offset-gray-900' : ''}
       `}
     >
       <Handle type="target" position={Position.Left} className="!bg-purple-400 !w-2 !h-2" />
